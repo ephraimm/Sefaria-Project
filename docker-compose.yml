@@ -12,6 +12,12 @@ services:
 
   db:
     image: "mongo:4.4"
+    deploy:
+      resources:
+        limits:
+          memory: 2G    # Half of available RAM
+        reservations:
+          memory: 1G
     volumes:
       - mongo-data:/data/db
       - ./mongod.conf:/etc/mongod.conf
