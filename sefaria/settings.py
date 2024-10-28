@@ -341,3 +341,5 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 24000000
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 MONGO_HOST = "db"
+
+SILENCED_SYSTEM_CHECKS = ['captcha.recaptcha_test_key_error']
