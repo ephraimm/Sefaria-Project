@@ -98,8 +98,8 @@ def process_register_form(request, auth_method='session'):
                     bucket_name = GoogleStorageManager.PROFILES_BUCKET
                     with Image.open(r) as image:
                         now = epoch_time()
-                        big_pic_url = #GoogleStorageManager.upload_file(get_resized_file(image, (250, 250)), "{}-{}.png".format(p.slug, now), bucket_name, None)
-                        small_pic_url = #GoogleStorageManager.upload_file(get_resized_file(image, (80, 80)), "{}-{}-small.png".format(p.slug, now), bucket_name, None)
+                        big_pic_url = ""#GoogleStorageManager.upload_file(get_resized_file(image, (250, 250)), "{}-{}.png".format(p.slug, now), bucket_name, None)
+                        small_pic_url = ""#GoogleStorageManager.upload_file(get_resized_file(image, (80, 80)), "{}-{}-small.png".format(p.slug, now), bucket_name, None)
                         p.profile_pic_url = big_pic_url
                         p.profile_pic_url_small = small_pic_url
             except urllib.error.HTTPError as e:

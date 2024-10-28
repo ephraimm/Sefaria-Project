@@ -157,6 +157,8 @@ INSTALLED_APPS = (
 
 LOGIN_URL = 'login'
 
+ADMIN_PATH = 'admin' #This will be the path to the admin site, locally it can also be 'admin'
+
 LOGIN_REDIRECT_URL = 'table_of_contents'
 
 LOGOUT_REDIRECT_URL = 'table_of_contents'

@@ -13,7 +13,7 @@ const local_settings = {
     if ('REDIS_HOST' in process.env) {
       return process.env.REDIS_HOST;
     } else {
-      return "127.0.0.1"; // default;
+      return "cache"; // default;
     }
   }(),
 
