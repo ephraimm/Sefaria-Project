@@ -24,6 +24,7 @@ import {
   WordByWordPage,
   JobsPage,
   TeamMembersPage,
+  ProductsPage
 } from './StaticPages';
 import UpdatesPanel from './UpdatesPanel';
 import {
@@ -1013,11 +1014,20 @@ toggleSignUpModal(modalContentKind = SignUpModalKind.Default) {
 }
   getHTMLLinkParentOfEventTarget(event){
     //get the lowest level parent element of an event target that is an HTML link tag. Or Null.
-    let target = event.target,
-    parent = target,
-    outmost = event.currentTarget;
+    return this.getEventTargetByCondition(event, element => element.nodeName === "A");
+  }
+  getEventTargetByCondition(event, condition, eventTarget=null) {
+    /**
+     * Searches the parents of an event target for an element to meets a certain condition
+     * `condition` is a function of form condition(element) => bool.
+     * If `eventTarget` is passed, it will be used as the starting point of the search instead of `event.target`
+     * Returns the first element in parent hierarchy where `condition` returns true
+     * If no element returns true, returns null.
+     */
+    let parent = eventTarget || event.target;
+    const outmost = event.currentTarget;
     while (parent) {
-      if(parent.nodeName === 'A'){
+      if(condition(parent)){
         return parent
       }
       else if (parent.parentNode === outmost) {
@@ -1036,6 +1046,14 @@ toggleSignUpModal(modalContentKind = SignUpModalKind.Default) {
         e.stopImmediatePropagation();
         return;
       }
+    }
+  }
+  handleAppClick(event) {
+    if (linkTarget) {
+      this.handleInAppLinkClick(event);
+    }
+    if (this.eventIsAnalyticsEvent(event)) {
+      this.handleAnalyticsEvent(event);
     }
   }
   handleInAppLinkClick(e) {
@@ -1433,7 +1451,8 @@ toggleSignUpModal(modalContentKind = SignUpModalKind.Default) {
     this.state.panels = []; // temporarily clear panels directly in state, set properly with setState in openPanelAt
     this.openPanelAt(0, ref, currVersions, options);
   }
-  openPanelAt(n, ref, currVersions, options, replace, convertCommentaryRefToBaseRef=true, replaceHistory=false, saveLastPlace=true) {
+  openPanelAt(n, ref, currVersions, options, replace, convertCommentaryRefToBaseRef=true,
+              replaceHistory=false, saveLastPlace=true, forceOpenCommentaryPanel=false) {
     /* Open a new panel or replace existing panel. If book level, Open book toc
     * @param {int} n: Open new panel after `n` with the new ref
     * @param {string} ref: ref to use for new panel.  `ref` can refer to book, actual ref, or sheet.
@@ -1443,6 +1462,8 @@ toggleSignUpModal(modalContentKind = SignUpModalKind.Default) {
     * @param {bool} convertCommentaryRefToBaseRef: if true and ref is commentary ref (Rashi on Genesis 3:3:1), open Genesis 3:3 with Rashi's comments in the sidebar
     * @param {bool} replaceHistory: can be true when openPanelAt is called from showBaseText in cases of ref normalizing in TextRange when we want to replace history with normalized ref
     * @param {bool} saveLastPlace: whether to save user history.
+    * @param {bool} forceOpenCommentaryPanel: If true, the commentary side panel will open regardless of the ref's depth.
+    *                                       If false, side panel will only open if ref is depth 3 or greater; see `Sefaria.isCommentaryRefWithBaseText()`
     */
     this.replaceHistory = Boolean(replaceHistory);
     const parsedRef = Sefaria.parseRef(ref);
@@ -1462,7 +1483,7 @@ toggleSignUpModal(modalContentKind = SignUpModalKind.Default) {
     } else {  // Text
       let filter = [];
       let filterRef;
-      if (convertCommentaryRefToBaseRef && Sefaria.isCommentaryRefWithBaseText(ref)) {
+      if (convertCommentaryRefToBaseRef && Sefaria.isCommentaryRefWithBaseText(ref, forceOpenCommentaryPanel)) {
         // getBaseRefAndFilter breaks up the ref "Rashi on Genesis 1:1:4" into filter "Rashi" and ref "Genesis 1:1",
         // so `filterRef` is needed to store the entire "Rashi on Genesis 1:1:4"
         filterRef = Sefaria.humanRef(ref);
@@ -2334,5 +2355,6 @@ export {
   WordByWordPage,
   JobsPage,
   TeamMembersPage,
+  ProductsPage,
   UpdatesPanel
 };

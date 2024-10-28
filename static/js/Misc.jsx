@@ -23,6 +23,7 @@ import Cookies from "js-cookie";
 import {EditTextInfo} from "./BookPage";
 import ReactMarkdown from 'react-markdown';
 import TrackG4 from "./sefaria/trackG4";
+import { ReaderApp } from './ReaderApp';
 
 /**
  * Component meant to simply denote a language specific string to go inside an InterfaceText element
@@ -499,6 +500,7 @@ const FilterableList = ({
               name="filterableListInput"
               value={filter}
               onChange={e => setFilter(e.target.value)}
+              data-anl-event="search:input"
             />
           </div>
           <div className="filter-sort-wrapper">
@@ -510,6 +512,17 @@ const FilterableList = ({
                 key={option}
                 className={classNames({'sans-serif': 1, 'sort-option': 1, noselect: 1, active: sortOption === option})}
                 onClick={() => setSort(option)}
+                tabIndex="0"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.target.click();
+                  }
+                }}
+                data-anl-event="sort_by:click"
+                data-anl-batch={JSON.stringify({
+                  text: option, from: sortOption, to: option,
+                })}
               >
                 <InterfaceText context="FilterableList">{option}</InterfaceText>
               </span>
@@ -1045,34 +1058,11 @@ class ToggleOption extends Component {
   }
 }
 
-         //style={this.props.style}
-
-const requestWithCallBack = ({url, setSavingStatus, redirect, type="POST", data={}, redirect_params}) => {
-    let ajaxPayload = {url, type};
-    if (type === "POST") {
-      ajaxPayload.data = {json: JSON.stringify(data)};
-    }
-    $.ajax({
-      ...ajaxPayload,
-      success: function(result) {
-        if ("error" in result) {
-          if (setSavingStatus) {
-            setSavingStatus(false);
-          }
-          alert(result.error);
-        } else {
-          redirect();
-        }
-      }
-    }).fail(function() {
-      alert(Sefaria._("Something went wrong. Sorry!"));
-    });
-}
 
  const TopicToCategorySlug = function(topic, category=null) {
    //helper function for AdminEditor
    if (!category) {
-     category = Sefaria.topicTocCategory(topic.slug);
+     category = Sefaria.displayTopicTocCategory(topic.slug);
    }
    let initCatSlug = category ? category.slug : "Main Menu";    //category topics won't be found using topicTocCategory,
    // so all category topics initialized to "Main Menu"
@@ -1104,6 +1094,7 @@ const AllAdminButtons = ({ buttonOptions, buttonIDs, adminClasses }) => {
         const [buttonText, toggleAddingTopics] = buttonOptions[key];
         return (
           <AdminEditorButton
+            key={`${buttonText}|${i}`}
             text={buttonText}
             top={top}
             bottom={bottom}
@@ -1165,6 +1156,15 @@ const CategoryHeader =  ({children, type, data = [], toggleButtonIDs = ["subcate
   }
   return <span className={wrapper}><span onMouseEnter={() => setHiddenButtons()}>{children}</span><span>{adminButtonsSpan}</span></span>;
 }
+
+
+//Pencil-shaped button to open the ref-link (source) editor
+const PencilSourceEditor = ({topic, text, classes}) => {
+    const [addSource, toggleAddSource] = useEditToggle();
+    return addSource ? <SourceEditor topic={topic} origData={text} close={toggleAddSource}/> :
+        <img className={classes} id={"editTopic"} onClick={toggleAddSource} src={"/static/icons/editing-pencil.svg"}/>;
+}
+
 const ReorderEditorWrapper = ({toggle, type, data}) => {
     /*
     Wrapper for ReorderEditor that can reorder topics, categories, and sources.  It is only used for reordering topics and categories at the
@@ -1183,9 +1183,11 @@ const ReorderEditorWrapper = ({toggle, type, data}) => {
     }
     const _createURLs = (type, data) => {
       if (reorderingSources) {
+        const urlObj = new URL(window.location.href);
+        const tabName = urlObj.searchParams.get('tab');
         return {
           url: `/api/source/reorder?topic=${data.slug}&lang=${Sefaria.interfaceLang}`,
-          redirect: `/topics/${data.slug}`,
+          redirect: `/topics/${data.slug}?sort=Relevance&tab=${tabName}`,
           origItems: _filterAndSortRefs(data.tabs?.sources?.refs) || [],
         }
       }
@@ -1216,7 +1218,10 @@ const ReorderEditorWrapper = ({toggle, type, data}) => {
 
 const EditorForExistingTopic = ({ toggle, data }) => {
   const prepAltTitles = (lang) => { // necessary for use with TitleVariants component
-    return data.titles.filter(x => !x.primary && x.lang === lang).map((item, i) => ({["name"]: item.text, ["id"]: i}))
+    return data.titles.filter(x => !x.primary && x.lang === lang).map((item, i) => ({
+      name: item.disambiguation ? `${item.text} (${item.disambiguation})` : item.text,
+      id: i
+  }))
   }
   const initCatSlug = TopicToCategorySlug(data);
   const origData = {
@@ -1516,31 +1521,60 @@ const ToolTipped = ({ altText, classes, style, onClick, children }) => {
   </div>
 )};
 
+const AiLearnMoreLink = ({lang}) => {
+  const text = lang === 'english' ? 'Learn More' : 'לפרטים נוספים';
+  return (
+      <a href={"/sheets/583824?lang=bi"} data-anl-event="learn_more_click:click" data-anl-text="learn_more">
+        {text}
+      </a>
+  );
+};
+
+const AiFeedbackLink = ({lang}) => {
+  const text = lang === 'english' ? 'Feedback' : 'כתבו לנו';
+  return (
+      <a href={"https://sefaria.formstack.com/forms/ai_feedback_form"} data-anl-event="feedback_click:click" data-anl-text="feedback">
+        {text}
+      </a>
+  );
+}
+
 const AiInfoTooltip = () => {
   const [showMessage, setShowMessage] = useState(false);
   const aiInfoIcon = (
-            <img className="ai-info-icon" src="/static/icons/ai-info.svg" alt="AI Info Icon" onMouseEnter={() => setShowMessage(true)} onMouseLeave={() => setShowMessage(false)}/>
+      <img
+          className="ai-info-icon"
+          data-anl-event="ai_marker_hover:mouseover"
+          src="/static/icons/ai-info.svg"
+          alt="AI Info Icon" onMouseEnter={() => setShowMessage(true)}
+          onMouseLeave={() => setShowMessage(false)}
+      />
     );
-        const aiMessage = (
-        <div className="ai-info-messages-box" onMouseEnter={() => setShowMessage(true)} onMouseLeave={() => setShowMessage(false)}>
-              <div className="ai-info-first-message">
-              <InterfaceText>
-                  <EnglishText>Some of the text on this page has been AI generated and reviewed by our editors. <a href={"/sheets/541399?lang=en"}>Learn more.</a></EnglishText>
-                  <HebrewText>חלק מהטקסטים בדף זה נוצרו על ידי בינה מלאכותית ועברו הגהה על ידי צוות העורכים שלנו.&nbsp;
-                       <a href={"/sheets/541399?lang=en"}>לפרטים נוספים</a></HebrewText>
-              </InterfaceText>
+  const aiMessage = (
+      <div className="ai-info-messages-box" onMouseEnter={() => setShowMessage(true)} onMouseLeave={() => setShowMessage(false)}>
+            <div className="ai-info-first-message">
+            <InterfaceText>
+                <EnglishText>Some of the text on this page has been AI generated and reviewed by our editors.
+                  &nbsp;<AiLearnMoreLink lang="english" />
+                </EnglishText>
+                <HebrewText>חלק מהטקסטים בדף זה נוצרו על ידי בינה מלאכותית ועברו הגהה על ידי צוות העורכים שלנו.&nbsp;
+                  <AiLearnMoreLink lang="hebrew" />
+                </HebrewText>
+            </InterfaceText>
 
-          </div>
-          <hr className="ai-info-messages-hr" />
-          <div className="ai-info-last-message">
-              <InterfaceText><EnglishText><a href={"https://sefaria.formstack.com/forms/ai_feedback_form"}>Feedback</a></EnglishText>
-              <HebrewText><a href={"https://sefaria.formstack.com/forms/ai_feedback_form"}>כתבו לנו</a></HebrewText>
-              </InterfaceText>
-          </div>
         </div>
-    );
+        <hr className="ai-info-messages-hr" />
+        <div className="ai-info-last-message">
+            <InterfaceText><EnglishText><AiFeedbackLink lang="english" /></EnglishText>
+            <HebrewText><AiFeedbackLink lang="hebrew" /></HebrewText>
+            </InterfaceText>
+        </div>
+      </div>
+  );
   return (
-    <div className="ai-info-tooltip">
+    <div className="ai-info-tooltip"
+         data-anl-feature_name="ai_marker"
+    >
       {aiInfoIcon}
         <div className={`ai-message ${(showMessage) ? 'visible' : ''}`}>
             {aiMessage}
@@ -1676,7 +1710,7 @@ const TopicPictureUploader = ({slug, callback, old_filename, caption}) => {
     const deleteImage = () => {
         const old_filename_wout_url = old_filename.split("/").slice(-1);
         const url = `${Sefaria.apiHost}/api/topics/images/${slug}?old_filename=${old_filename_wout_url}`;
-        requestWithCallBack({url, type: "DELETE", redirect: () => alert("Deleted image.")});
+        Sefaria.adminEditorApiRequest(url, null, null, "DELETE").then(() => alert("Deleted image."));
         callback("");
         fileInput.current.value = "";
     }
@@ -2097,7 +2131,7 @@ function OnInView({ children, onVisible }) {
    *  `onVisible` callback function that will be called when given component(s) are visible within the viewport
    *  Ex. <OnInView onVisible={handleImageIsVisible}><img src="..." /></OnInView>
    */
-  const elementRef = useRef(); 
+  const elementRef = useRef();
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -3300,8 +3334,8 @@ return Sefaria._v(caption) || Sefaria._('Illustrative image');
 const ImageWithCaption = ({photoLink, caption }) => {
   return (
     <div>
-        <img class="imageWithCaptionPhoto" src={photoLink} alt={getImgAltText(caption)}/>
-        <div class="imageCaption"> 
+        <img className="imageWithCaptionPhoto" src={photoLink} alt={getImgAltText(caption)}/>
+        <div className="imageCaption">
           <InterfaceText text={caption} />
         </div>
       </div>);
@@ -3319,6 +3353,122 @@ const AppStoreButton = ({ platform, href, altText }) => {
       </a>
   );
 };
+
+const handleAnalyticsOnMarkdown = (e, gtag_fxn, rank, product, cta, label, link_type, analytics_event) => {
+
+
+  // get the lowest level parent element of an event target that is an HTML link tag. Or Null.
+  let target = e.target;
+  let linkTarget = null;
+  let parent = target;
+  let outmost = e.currentTarget;
+  let text = "";
+
+  while (parent) {
+    if(parent.nodeName === 'A'){
+      linkTarget = parent;
+      text = linkTarget.text
+      break;
+    }
+    else if (parent.parentNode === outmost) {
+      return null;
+    }
+    parent = parent.parentNode;
+  }
+
+  // Ignore clicks from non-a elements.
+  if (!linkTarget) {
+    return;
+  }
+  const href = linkTarget.getAttribute('href');
+  if (!href) {
+    return;
+  }
+  else {
+    gtag_fxn(rank, product, text, label, link_type, analytics_event);
+  }
+}
+
+
+const LangRadioButton = ({buttonTitle, lang, buttonId, handleLangChange}) => {
+
+  return (
+      <div
+          className={classNames({ active: lang === buttonId, radioChoice: 1 })}
+          data-anl-event="lang_toggle_select:click"
+          data-anl-text={buttonId}
+          data-anl-to={buttonId}
+      >
+        <label htmlFor={buttonId}>
+          <InterfaceText>{buttonTitle}</InterfaceText>
+        </label>
+        <input
+          type="radio"
+          id={buttonId}
+          name="options"
+          value={buttonId}
+          checked={lang === buttonId}
+          onChange={handleLangChange}
+        />
+      </div>
+  );
+};
+const LangSelectInterface = ({callback, defaultVal, closeInterface}) => {
+  const [lang, setLang] = useState(defaultVal);
+  const buttonData = [
+  { buttonTitle: "Source Language", buttonId: "source" },
+  { buttonTitle: "Translation", buttonId: "translation" },
+  { buttonTitle: "Source with Translation", buttonId: "sourcewtrans" }
+];
+
+  const handleLangChange = (event) => {
+    setLang(event.target.value);
+    callback(event.target.value);
+    closeInterface();
+  };
+
+  useEffect(()=>{
+    document.querySelector('.langSelectPopover').focus()
+  },[])
+
+  return (
+    <div className="langSelectPopover"
+      tabIndex="0"
+      data-anl-batch={JSON.stringify({
+        feature_name: "source lang toggled",
+        text: lang,
+        from: lang,
+      })}
+      onClick={(e) => {
+          e.stopPropagation();
+          e.nativeEvent.stopImmediatePropagation();
+        }
+      }
+
+      // HACK to prevent the option menu to close once an option is selected (which is technically blurring this element)
+      onBlur={(e) => {
+            setTimeout(() => {
+              if (!document.querySelector('.langSelectPopover').contains(document.activeElement)) {
+                closeInterface();
+              }
+            }, 50);
+        }
+      }
+    >
+      <div className="langHeader"><InterfaceText>Source Language</InterfaceText></div>
+       {buttonData.map((button, index) => (
+        <LangRadioButton
+          key={button.buttonId}
+          buttonTitle={button.buttonTitle}
+          lang={lang}
+          buttonId={button.buttonId}
+          handleLangChange={handleLangChange}
+        />
+      ))}
+    </div>
+  );
+
+}
 
 
 export {
@@ -3385,8 +3535,10 @@ export {
   AdminToolHeader,
   CategoryChooser,
   TitleVariants,
-  requestWithCallBack,
   OnInView,
   TopicPictureUploader,
-  ImageWithCaption
+  ImageWithCaption,
+  handleAnalyticsOnMarkdown,
+  LangSelectInterface,
+  PencilSourceEditor
 };

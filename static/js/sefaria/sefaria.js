@@ -274,6 +274,12 @@ Sefaria = extend(Sefaria, {
     let index = Sefaria.index(pRef.index);
     return index && index.categories ? index.categories : [];
   },
+  refIndexTitle: function(ref) {
+    let pRef = Sefaria.parseRef(ref);
+    if ("error" in pRef) { return null; }
+    let index = Sefaria.index(pRef.index);
+    return index?.title
+  },
   sectionRef: function(ref, deriveIfNotFound=false) {
     // Returns the section level ref for `ref` or null if no data is available
     const oref = this.getRefFromCache(ref);
@@ -324,12 +330,12 @@ Sefaria = extend(Sefaria, {
     }
   },
     /**
-     * Helps the BookPage toc translate the given integer to the correctly formatted display string for the section given the varying address types. 
+     * Helps the BookPage toc translate the given integer to the correctly formatted display string for the section given the varying address types.
      * @param {string} addressType - The address type of the schema being requested
      * @param {number} i - The numeric section string from the database
      * @param {number} offset - If needed, an offest to allow section addresses that do not start counting with 0
-     * @returns {[string,string]} Section string in both languages. 
-     */  
+     * @returns {[string,string]} Section string in both languages.
+     */
   getSectionStringByAddressType: function(addressType, i, offset=0) {
     let section = i + offset;
     let enSection, heSection;
@@ -337,11 +343,11 @@ Sefaria = extend(Sefaria, {
       enSection = Sefaria.hebrew.intToDaf(section);
       heSection = Sefaria.hebrew.encodeHebrewDaf(enSection);
     } else if (addressType === "Year") {
-      enSection = section + 1241;  
+      enSection = section + 1241;
       heSection = Sefaria.hebrew.encodeHebrewNumeral(section+1);
       heSection = heSection.slice(0,-1) + '"' + heSection.slice(-1);
     } else if (addressType === "Folio") {
-      enSection = Sefaria.hebrew.intToFolio(section);  
+      enSection = Sefaria.hebrew.intToFolio(section);
       heSection = Sefaria.hebrew.encodeHebrewFolio(enSection);
     } else {
       enSection = section + 1;
@@ -463,32 +469,64 @@ Sefaria = extend(Sefaria, {
         });
   },
   _bulkTexts: {},
+  partitionArrayForURL: function(arr, urlMaxLength, dividerToken) {
+    const result = [];
+    const dividerTokenLength = encodeURIComponent(dividerToken).length;
+    let currentPartition = [];
+    let currentLength = 0;
+
+    for (let i = 0; i < arr.length; i++) {
+        // Calculate the length of the new item when added to the partition
+        const item = arr[i];
+        const encodedItem = encodeURIComponent(item);
+        const newLength = currentPartition.length === 0
+            ? encodedItem.length
+            : currentLength + encodedItem.length + dividerTokenLength; // consider dividerToken length
+
+        // Check if adding this item exceeds the max length
+        if (newLength > urlMaxLength) {
+            // If it does, push the current partition to the result and start a new one
+            result.push(currentPartition);
+            currentPartition = [];
+            currentLength = 0;
+            currentPartition.push(item);
+            continue
+        }
+
+        // Add the item to the current partition
+        currentPartition.push(item);
+        currentLength = newLength;
+    }
+
+    // Add the last partition to the result
+    if (currentPartition.length > 0) {
+        result.push(currentPartition);
+    }
+
+    return result;
+},
+
   getBulkText: function(refs, asSizedString=false, minChar=null, maxChar=null, transLangPref=null) {
     if (refs.length === 0) { return Promise.resolve({}); }
 
     const MAX_URL_LENGTH = 3800;
-    const hostStr = `${Sefaria.apiHost}/api/bulktext/`;
+    const ASSUMED_HOSTNAME_LENGTH_BOUND = 50;
+    const hostStr = encodeURI(`${Sefaria.apiHost}/api/bulktext/`);
 
     let paramStr = '';
     for (let [paramKey, paramVal] of Object.entries({asSizedString, minChar, maxChar, transLangPref})) {
       paramStr = !!paramVal ? paramStr + `&${paramKey}=${paramVal}` : paramStr;
     }
     paramStr = paramStr.replace(/&/,'?');
+    paramStr = encodeURI(paramStr);
 
     // Split into multiple requests if URL length goes above limit
-    let refStrs = [""];
-    refs.map(ref => {
-      let last = refStrs[refStrs.length-1];
-      const encodedRef = encodeURIComponent(ref)
-      if (`${hostStr}${last}|${encodedRef}${paramStr}`.length > MAX_URL_LENGTH) {
-        refStrs.push(encodedRef)
-      } else {
-        refStrs[refStrs.length-1] += last.length ? `|${encodedRef}` : encodedRef;
-      }
-    });
+    const limit = MAX_URL_LENGTH-(hostStr+paramStr).length-ASSUMED_HOSTNAME_LENGTH_BOUND
+    const refsSubArrays = this.partitionArrayForURL( refs, limit, '|');
+    const refStrs = refsSubArrays.map(refsSubArray => refsSubArray.join('|'));
 
     let promises = refStrs.map(refStr => this._cachedApiPromise({
-      url: `${hostStr}${refStr}${paramStr}`,
+      url: `${hostStr}${encodeURIComponent(refStr)}${paramStr}`,
       key: refStr + paramStr,
       store: this._bulkTexts
     }));
@@ -623,27 +661,52 @@ Sefaria = extend(Sefaria, {
         firstName: firstName,
         lastName: lastName,
       };
-      return await Sefaria.postToApi(`/api/subscribe/${email}`, null, payload);
+      return await Sefaria.apiRequestWithBody(`/api/subscribe/${email}`, null, payload);
   },
   subscribeSteinsaltzNewsletter: async function(firstName, lastName, email) {
       const payload = {firstName, lastName};
-      return await Sefaria.postToApi(`/api/subscribe/steinsaltz/${email}`, null, payload);
+      return await Sefaria.apiRequestWithBody(`/api/subscribe/steinsaltz/${email}`, null, payload);
   },
-
-    postToApi: async function(url, urlParams, payload) {
+  postRefTopicLink: function(refInUrl, payload) {
+      const url = `/api/ref-topic-links/${Sefaria.normRef(refInUrl)}`;
+      // payload will need to be refactored once /api/ref-topic-links takes a more standard input
+      return Sefaria.adminEditorApiRequest(url, null, payload);
+  },
+  adminEditorApiRequest: async function(url, urlParams, payload, method="POST") {
+      /**
+       * Wraps apiRequestWithBody() with basic alerting if response has an error
+       */
+      let result;
+      try {
+          result = await Sefaria.apiRequestWithBody(url, urlParams, payload, method);
+      } catch (e) {
+          alert(Sefaria._("Something went wrong. Sorry!"));
+          throw e;
+      }
+      if (result.error) {
+          alert(result.error);
+          throw result.error;
+      } else {
+          return result;
+      }
+  },
+  apiRequestWithBody: async function(url, urlParams, payload, method="POST") {
+    /**
+     * Generic function for performing an API request with a payload. Payload and urlParams are optional and will not be used if falsy.
+     */
     let apiUrl = this.apiHost + url;
     if (urlParams) {
         apiUrl += '?' + new URLSearchParams(urlParams).toString();
     }
     const response = await fetch(apiUrl, {
-        method: "POST",
+        method,
         mode: 'same-origin',
         headers: {
             'X-CSRFToken': Cookies.get('csrftoken'),
             'Content-Type': 'application/json'
         },
         credentials: 'same-origin',
-        body: JSON.stringify(payload)
+        body: payload && JSON.stringify(payload)
     });
 
     if (!response.ok) {
@@ -664,54 +727,43 @@ Sefaria = extend(Sefaria, {
       ]);
       return {status: "ok"};
   },
-  filterVersionsObjByLangs: function(versionsObj, langs, includeFilter) {
+  filterVersionsByAttr: function(versionsObj, filterObj) {
       /**
-       * @versionsObj {object} whode keys are language codes ('he', 'en' etc.) and values are version objects (like the object that getVersions returns)
-       * @langs {array} of string of language codes
-       * @includeFilter {boolean} true for returning the language in the langs param, false for returning other languages
+       * @versionsObj {object} whose keys are language codes ('he', 'en' etc.) and values are version objects (like the object that getVersions returns)
+       * * @filterObj {object} keys are attribute of version objects and values are their values
+       * returns the versionsObj after filtering its version, and filtering languages with no matching versions
        */
-    return Object.keys(versionsObj)
-        .filter(lang => {
-            return includeFilter === langs.includes(lang);
-        })
-        .reduce((obj, lang) => {
-            obj[lang] = versionsObj[lang];
-            return obj;
-          }, {});
-  },
-  filterVersionsArrayByAttr: function(versionsArray, filterObj) {
-      /**
-       * @versionsArray {array} of version objects
-       * @filterObj {object} keys are attribute of version objects and values are their values
-       * returns an array of versions from versionsArray that has all the attributes and their values as in filterObj
-       */
-    return versionsArray.filter(version => {
-        return Object.keys(filterObj).every(key => version?.[key] === filterObj[key])
-    });
+
+    return Object.fromEntries(
+        Object.entries(versionsObj).reduce((acc, [lang, versions]) => {
+            const filteredVersions = versions.filter(version =>
+                Object.entries(filterObj).every(([key, value]) => version?.[key] === value)
+            );
+            if (filteredVersions.length) {
+              acc.push([lang, filteredVersions]);
+            }
+            return acc;
+        }, [])
+    );
   },
   getSourceVersions: async function(ref) {
     /**
-     * Gets Hebrew versions only
-     * @ref {string} ref
+     * Gets all versions that have isSource true
+     * * @ref {string} ref
      * @returns {string: [versions]} Versions by language
      */
     return Sefaria.getVersions(ref).then(versions => {
-        return Sefaria.filterVersionsObjByLangs(versions, ['he'], true);
+        return Sefaria.filterVersionsByAttr(versions, {isPrimary: true});
     });
   },
   getTranslations: async function(ref) {
     /**
-     * Gets all versions except Hebrew versions that have isSource true
+     * Gets all versions that have isSource false
      * @ref {string} ref
      * @returns {string: [versions]} Versions by language
      */
-    return Sefaria.getVersions(ref).then(result => {
-        let versions = Sefaria.filterVersionsObjByLangs(result, ['he'], false);
-        let heVersions = Sefaria.filterVersionsArrayByAttr(result?.he || [], {isSource: false});
-        if (heVersions.length) {
-            versions.he = heVersions;
-        }
-        return versions;
+    return Sefaria.getVersions(ref).then(versions => {
+        return Sefaria.filterVersionsByAttr(versions, {isSource: false});
     });
   },
   _makeVersions: function(versions, byLang){
@@ -2210,14 +2262,22 @@ _media: {},
        */
       return book?.dependence === "Commentary" && !!book?.base_text_titles && !!book?.base_text_mapping && book?.base_text_titles.length === 1;
   },
-  isCommentaryRefWithBaseText(ref) {
+  isCommentaryRefWithBaseText(ref, forceOpenCommentaryPanel) {
       /* This is a helper function for openPanelAt. Determines whether the ref(s) are part of a commentary
        * with a base_text_mapping to one and only one base_text_title.
        * Example: "Ibn Ezra on Genesis 3" returns True because this commentary has a base_text_mapping to one and only one book, Genesis.
-       * @param {string/array of strings} ref: if array, checks the first ref
+       * @param {string/array of strings} ref: if ref is an array, checks the first ref
+       * @param {bool} forceOpenCommentaryPanel: If true, the commentary side panel will open regardless of the ref's depth.
+       *                                        If false, side panel will only open if ref is depth 3 or greater.
        */
       let refToCheck = Array.isArray(ref) ? ref[0] : ref;
       const parsedRef = Sefaria.parseRef(refToCheck);
+      const depth = parsedRef.sections.length;
+      if (!forceOpenCommentaryPanel && depth < 3) {
+          // This is because in some Talmud commentaries and in complex texts where the node has a depth less than 3,
+          // it can be difficult to know what comments to show in the sidebar so we should open the commentary in the main panel.
+          return false;
+      }
       const book = Sefaria.index(parsedRef.index);
       if (!this.isCommentaryWithBaseText(book)) {
           return false;
@@ -2609,7 +2669,7 @@ _media: {},
     'authors': ['popular-writing-of'],
   },
   getTopic: function(slug, {annotated=true, with_html=false}={}) {
-    const cat = Sefaria.topicTocCategory(slug);
+    const cat = Sefaria.displayTopicTocCategory(slug);
     let ref_link_type_filters = ['about', 'popular-writing-of']
     // overwrite ref_link_type_filters with predefined list. currently used to hide "Sources" and "Sheets" on author pages.
     if (!!cat && !!Sefaria._CAT_REF_LINK_TYPE_FILTER_MAP[cat.slug]) {
@@ -2629,22 +2689,25 @@ _media: {},
       return slug + (annotated ? "-a" : "") + (with_html ? "-h" : "");
   },
   processTopicsData: function(data) {
+    const lang = Sefaria.interfaceLang == "hebrew" ? 'he' : 'en'
     if (!data) { return null; }
     if (!data.refs) { return data; }
     const tabs = {};
     for (let [linkTypeSlug, linkTypeObj] of Object.entries(data.refs)) {
       for (let refObj of linkTypeObj.refs) {
+        // sheets are no longer displayed on topic pages
+        if (refObj.is_sheet) { continue; }
         let tabKey = linkTypeSlug;
         if (tabKey === 'about') {
-          tabKey = refObj.is_sheet ? 'sheets' : 'sources';
+            tabKey = (refObj.descriptions?.[lang]?.title || refObj.descriptions?.[lang]?.prompt) ? 'notable-sources' : 'sources';
         }
         if (!tabs[tabKey]) {
           let { title } = linkTypeObj;
-          if (tabKey === 'sheets') {
-            title = {en: 'Sheets', he: Sefaria._('Sheets')};
+          if (tabKey === 'notable-sources') {
+            title = {en: 'Notable Sources', he: Sefaria.translation('hebrew', 'Notable Sources')};
           }
           if (tabKey === 'sources') {
-            title = {en: 'Sources', he: Sefaria._('Sources')};
+            title = {en: 'Sources', he: Sefaria.translation('hebrew', 'Sources')};
           }
           tabs[tabKey] = {
             refMap: {},
@@ -2652,20 +2715,33 @@ _media: {},
             shouldDisplay: linkTypeObj.shouldDisplay,
           };
         }
-        const ref = refObj.is_sheet ? parseInt(refObj.ref.replace('Sheet ', '')) : refObj.ref;
         if (refObj.order) {
             refObj.order = {...refObj.order, availableLangs: refObj?.order?.availableLangs || [],
                                 numDatasource: refObj?.order?.numDatasource || 1,
                                 tfidf: refObj?.order?.tfidf || 0,
                                 pr: refObj?.order?.pr || 0,
                                 curatedPrimacy: {he: refObj?.order?.curatedPrimacy?.he || 0, en: refObj?.order?.curatedPrimacy?.en || 0}}}
-        tabs[tabKey].refMap[refObj.ref] = {ref, order: refObj.order, dataSources: refObj.dataSources, descriptions: refObj.descriptions};
+        tabs[tabKey].refMap[refObj.ref] = {ref: refObj.ref, order: refObj.order, dataSources: refObj.dataSources, descriptions: refObj.descriptions};
       }
     }
     for (let tabObj of Object.values(tabs)) {
       tabObj.refs = Object.values(tabObj.refMap);
       delete tabObj.refMap;
     }
+
+    if (tabs["notable-sources"]) {
+      tabs["sources"]["title"] = {en: 'All Sources', he: Sefaria.translation('hebrew', 'All Sources')};
+    //turn "sources" tab into 'super-set', containing all refs from all tabs:
+      const allRefs = [...tabs["notable-sources"].refs, ...tabs["sources"].refs];
+      tabs["sources"].refs = allRefs;
+    }
+    if (Sefaria.is_moderator){
+        tabs["admin"] = {...tabs["sources"]};
+        tabs["admin"].title = {en: 'Admin', he: Sefaria.translation('hebrew', "Admin")};
+
+    }
+
+
     data.tabs = tabs;
     return data;
   },
@@ -2707,12 +2783,15 @@ _media: {},
   },
   _initTopicTocCategoryReducer: function(a,c) {
     if (!c.children) {
-      a[c.slug] = c.parent;
-      return a;
+        a[c.slug] = c.parents;
+        return a;
+    }
+    if (!c.parents) {
+        c.parents = [];
     }
     for (let sub_c of c.children) {
-      sub_c.parent = { en: c.en, he: c.he, slug: c.slug };
-      Sefaria._initTopicTocCategoryReducer(a, sub_c);
+        sub_c.parents = c.parents.concat({ en: c.en, he: c.he, slug: c.slug });
+        Sefaria._initTopicTocCategoryReducer(a, sub_c);
     }
     return a;
   },
@@ -2724,10 +2803,13 @@ _media: {},
     }
     return this._topicTocPages[key]
   },
-  topicTocCategory: function(slug) {
+  topicTocCategories: function(slug) {
     // return category english and hebrew for slug
     if (!this._topicTocCategory) { this._initTopicTocCategory(); }
     return this._topicTocCategory[slug];
+  },
+  displayTopicTocCategory: function(slug) {
+    return this.topicTocCategories(slug)?.at(-1);
   },
   _topicTocCategoryTitles: null,
   _initTopicTocCategoryTitles: function() {

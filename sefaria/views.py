@@ -179,8 +179,10 @@ def generic_subscribe_to_newsletter_api(request, org, email):
         "steinsaltz": subscribe_steinsaltz,
     }
     body = json.loads(request.body)
-    first_name = body.get("firstName", None)
-    last_name = body.get("lastName", None)
+    first_name = body.get("firstName")
+    last_name = body.get("lastName")
+    if not first_name or not last_name:
+        return jsonResponse({"error": "You must provide first and last name."})
     try:
         subscribe = org_subscribe_fn_map.get(org)
         if not subscribe:
@@ -343,6 +345,7 @@ def find_refs_api(request):
 @api_view(["GET"])
 def websites_api(request, domain):
     cb = request.GET.get("callback", None)
+    domain = WebPage.normalize_url(domain)
     website = WebSite().load({"domains": domain})
     if website is None:
         return jsonResponse({"error": f"no website found with domain: '{domain}'"})
@@ -416,7 +419,7 @@ def bundle_many_texts(refs, useTextFamily=False, as_sized_string=False, min_char
                     'url': oref.url()
                 }
             else:
-                he_tc = model.TextChunk(oref, "he", actual_lang=translation_language_preference, vtitle=hebrew_version)
+                he_tc = model.TextChunk(oref, "he", vtitle=hebrew_version)
                 en_tc = model.TextChunk(oref, "en", actual_lang=translation_language_preference, vtitle=english_version)
                 if hebrew_version and he_tc.is_empty():
                   raise NoVersionFoundError(f"{oref.normal()} does not have the Hebrew version: {hebrew_version}")
