@@ -12,10 +12,12 @@ services:
 
   db:
     image: "mongo:4.4"
-    ports:
-      - "27017:27017"
     volumes:
       - mongo-data:/data/db
+      - ./mongod.conf:/etc/mongod.conf
+    command: ["mongod", "--config", "/etc/mongod.conf"]
+    ports:
+      - "27017:27017"
 
   cache:
     image: "redis:latest"
