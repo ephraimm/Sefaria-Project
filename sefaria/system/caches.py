@@ -28,7 +28,7 @@ from sefaria.system.database import db
 
 
 def get_host_and_port(location):
-    location = location or 'localhost:27017'
+    location = location or 'db:27017'
     split_value = location.split(':')
     if len(split_value) == 1:
         return split_value[0], 27017

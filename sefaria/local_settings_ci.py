@@ -57,7 +57,7 @@ EMAIL_HOST = 'localhost'
 EMAIL_PORT = 1025
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
-MONGO_HOST = "localhost"
+MONGO_HOST = "db"
 MONGO_PORT = 27017
 
 # Name of the MongoDB database to use.

@@ -58,7 +58,7 @@ ADMIN_PATH = 'somethingsomething' #This will be the path to the admin site, loca
 PINNED_IPCOUNTRY = "IL" #change if you want parashat hashavua to be diaspora.
 
 MONGO_REPLICASET_NAME = None # If the below is a list, this should be set to something other than None. 
-# This can be either a string of one mongo host server or a list of `host:port` string pairs. So either e.g "localhost" of ["localhost:27017","localhost2:27017" ]
+# This can be either a string of one mongo host server or a list of `host:port` string pairs. So either e.g "localhost" of ["db:27017","localhost2:27017" ]
 MONGO_HOST = "localhost"
 MONGO_PORT = 27017 # Not used if the above is a list
 # Name of the MongoDB database to use.

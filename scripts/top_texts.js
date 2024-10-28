@@ -1,6 +1,6 @@
 // Generate scores for top text sections (Chapters, Dafs etc).
 
-var db = connect("localhost:27017/sefaria")
+var db = connect("db:27017/sefaria")
 
 // These values may be set form the command line (using --eval)
 // to authenticate. 
