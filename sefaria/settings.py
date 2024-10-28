@@ -152,7 +152,7 @@ INSTALLED_APPS = (
     'rest_framework',
     #'easy_timezones'
     # Uncomment the next line to enable admin documentation:
-    # 'django.contrib.admindocs',
+    'django.contrib.admindocs',
 )
 
 LOGIN_URL = 'login'

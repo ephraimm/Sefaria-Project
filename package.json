@@ -5,7 +5,7 @@
   "config": {
     "port": "4040"
   },
-  "main": "node/server.js",
+
   "scripts": {
     "start": "nodemon static/bundles/server/server-bundle.js",
     "daemon": "forever start -a -p ./ -l log/forever/forever.log -o log/forever/out.log -e log/forever/err.log -w --watchDirectory log/forever/timeout static/bundles/server/server-bundle.js ",

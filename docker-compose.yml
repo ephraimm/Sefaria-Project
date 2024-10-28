@@ -25,11 +25,16 @@ services:
       - "6379:6379"
 
   node:
-    image: "node:latest"
+    build:
+      context: .
+      dockerfile: ./node.dockerfile
+    # image: "node:latest"
     working_dir: /app
     volumes:
       - .:/app
     command: npm start
+    # command: ["tail", "-f", "/dev/null"]
+
     ports:
       - "3000:3000"
 
