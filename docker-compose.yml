@@ -57,16 +57,16 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/sefaria_data
 
-  nginx:
-    image: nginx:latest
-    ports:
-      - "81:80"
-      # - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/certs:/etc/nginx/certs
-    depends_on:
-      - node
+  # nginx:
+  #   image: nginx:latest
+  #   ports:
+  #     - "81:80"
+  #     # - "443:443"
+  #   volumes:
+  #     - ./nginx/conf.d:/etc/nginx/conf.d
+  #     - ./nginx/certs:/etc/nginx/certs
+  #   depends_on:
+  #     - node
 
 volumes:
   mongo-data:
