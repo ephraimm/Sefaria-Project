@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.8-slim
+FROM python:3.7-slim
 
 # Set the working directory to /app
 WORKDIR /app
@@ -20,7 +20,8 @@ COPY . /app
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
-    git
+    git \
+    mongodb-mongosh
 # Install any needed packages specified in requirements.txt
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
 
